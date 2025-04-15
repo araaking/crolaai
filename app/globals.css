@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes thinking-progress {
+  0% {
+    width: 0%;
+    opacity: 1;
+  }
+  50% {
+    width: 100%;
+    opacity: 0.5;
+  }
+  100% {
+    width: 0%;
+    opacity: 1;
+  }
+}
+
+.animate-thinking-progress {
+  animation: thinking-progress 3s ease-in-out infinite;
+}
