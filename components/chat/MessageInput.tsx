@@ -1,71 +1,57 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
-import { useChat } from '@/hooks/useChat';
+import React, { useState, FormEvent } from 'react';
+import { useChat } from '@/components/providers/ChatProvider';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { SendHorizontal, Plus, Mic, Loader2, AlertCircle } from 'lucide-react';
+import { MicIcon, Search, Loader2 } from 'lucide-react';
 
 export default function MessageInput() {
   const [inputValue, setInputValue] = useState('');
-  const { sendMessage, isSendingMessage, error } = useChat();
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { sendMessage, isSendingMessage, selectedModel } = useChat();
 
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-    }
-  }, [inputValue]);
-
-  const handleSendMessage = (e?: React.FormEvent<HTMLFormElement>) => {
+  const handleSendMessage = (e?: FormEvent) => {
     e?.preventDefault();
     const trimmedInput = inputValue.trim();
-    if (trimmedInput && !isSendingMessage) {
+    if (trimmedInput && !isSendingMessage && selectedModel) {
       sendMessage(trimmedInput);
       setInputValue('');
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
   return (
-    <form onSubmit={handleSendMessage} className="relative w-full">
-      {error && !isSendingMessage && (
-        <div className="absolute -top-8 left-0 flex items-center gap-2 text-xs text-red-500 mb-1">
-          <AlertCircle size={14} /> Error sending: {error.length > 50 ? error.substring(0, 50) + '...' : error}
-        </div>
-      )}
-      <div className="flex items-end gap-2 bg-gray-800 rounded-lg p-2 border border-gray-700 shadow-lg">
-        <Button variant="ghost" size="icon" className="text-gray-400 hover:text-white flex-shrink-0" type="button">
-          <Plus size={20} />
-        </Button>
-        <Textarea
-          ref={textareaRef}
+    <form onSubmit={handleSendMessage} className="w-full">
+      <div className="relative">
+        <input 
+          type="text"
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Type your message here... (Shift+Enter for newline)"
-          className="flex-1 bg-transparent border-none focus:ring-0 text-white placeholder-gray-500 resize-none overflow-y-hidden max-h-40 min-h-[40px] px-2 py-2 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
-          rows={1}
-          disabled={isSendingMessage}
+          placeholder="Apa yang ingin Anda tanyakan?"
+          className="w-full px-4 py-3 pr-24 border border-gray-300 rounded-full bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+          disabled={isSendingMessage || !selectedModel}
         />
-        <Button variant="ghost" size="icon" className="text-purple-400 hover:bg-gray-700 rounded-full flex-shrink-0" type="button" disabled={isSendingMessage}>
-          <Mic size={20} />
-        </Button>
-        <Button
-          type="submit"
-          size="icon"
-          className="bg-purple-600 hover:bg-purple-700 text-white rounded-full flex-shrink-0"
-          disabled={isSendingMessage || !inputValue.trim()}
-        >
-          {isSendingMessage ? <Loader2 size={20} className="animate-spin" /> : <SendHorizontal size={20} />}
-        </Button>
+        <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center gap-2">
+          <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 flex items-center justify-center hover:bg-gray-100" type="button" disabled={isSendingMessage}>
+            <MicIcon size={18} className="text-gray-400" />
+          </Button>
+          <Button 
+            className="rounded-full h-8 w-8 flex items-center justify-center bg-blue-500 hover:bg-blue-600"
+            type="submit"
+            disabled={isSendingMessage || !inputValue.trim() || !selectedModel}
+          >
+            {isSendingMessage ? (
+              <Loader2 size={16} className="animate-spin text-white" />
+            ) : (
+              <Search size={16} className="text-white rotate-90" />
+            )}
+          </Button>
+        </div>
+      </div>
+      
+      <div className="flex justify-center mt-2 gap-2">
+        <Button variant="outline" className="rounded-full px-4 py-1 text-xs bg-white border-gray-300 text-gray-700 hover:bg-gray-50" type="button">Artifacts</Button>
+        <Button variant="outline" className="rounded-full px-4 py-1 text-xs bg-white border-gray-300 text-gray-700 hover:bg-gray-50" type="button">Generasi Gambar</Button>
+        <Button variant="outline" className="rounded-full px-4 py-1 text-xs bg-white border-gray-300 text-gray-700 hover:bg-gray-50" type="button">Generasi Video</Button>
+        <Button variant="outline" className="rounded-full px-4 py-1 text-xs bg-white border-gray-300 text-gray-700 hover:bg-gray-50" type="button">Lainnya</Button>
       </div>
     </form>
   );

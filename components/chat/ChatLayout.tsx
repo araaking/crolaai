@@ -5,7 +5,7 @@ import ChatWindow from './ChatWindow';
 
 export default function ChatLayout() {
   return (
-    <div className="flex h-screen w-screen bg-gray-900 text-white font-sans overflow-hidden">
+    <div className="flex h-screen w-screen bg-white text-gray-800 font-sans overflow-hidden">
       <ChatSidebar />
       <ChatWindow />
     </div>
