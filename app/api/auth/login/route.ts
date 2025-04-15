@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     // Validasi input
     if (!email || !password) {
       return NextResponse.json(
-        { error: 'Email dan password harus diisi' },
+        { error: 'Email and password are required' },
         { status: 400 }
       );
     }
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json(
-        { error: 'Email atau password salah' },
+        { error: 'Invalid email or password' },
         { status: 401 }
       );
     }
@@ -43,27 +43,29 @@ export async function POST(request: NextRequest) {
     const isPasswordValid = await comparePassword(password, user.password);
     if (!isPasswordValid) {
       return NextResponse.json(
-        { error: 'Email atau password salah' },
+        { error: 'Invalid email or password' },
         { status: 401 }
       );
     }
 
     // Generate token
-    const token = generateToken({ userId: user.id, email: user.email });
+    const token = generateToken({
+      userId: user.id,
+      email: user.email,
+    });
 
-    // Return response
+    // Return user data without password
+    const { password: _, ...userWithoutPassword } = user;
+
     return NextResponse.json({
       token,
-      user: {
-        id: user.id,
-        email: user.email,
-      },
+      user: userWithoutPassword,
     });
 
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json(
-      { error: 'Terjadi kesalahan saat login' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

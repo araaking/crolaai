@@ -37,6 +37,9 @@ export function LoginForm() {
         throw new Error(data.error || `Login failed (status ${response.status})`);
       }
 
+      // Save token to localStorage directly with the correct key
+      localStorage.setItem('authToken', data.token);
+      
       login(data.token, data.user); // Store token using AuthContext
       router.push('/chat'); // Redirect to chat dashboard
 

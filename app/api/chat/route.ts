@@ -1,6 +1,9 @@
 // app/api/chat/route.ts
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { getAIResponse } from '@/lib/services/ai';
+import { prisma } from '@/lib/prisma';
+import { verifyAuth } from '@/lib/auth';
+import { MessageRole } from '@prisma/client';
 
 // Daftar model yang tersedia per provider
 const AVAILABLE_MODELS = {
@@ -14,19 +17,66 @@ const AVAILABLE_MODELS = {
   ]
 };
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const authPayload = verifyAuth(req);
+  if (!authPayload) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
-    const { message, modelId } = await req.json();
+    const { message, modelId, chatId } = await req.json();
     
     if (!message) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
     }
 
-    // Dapatkan response AI dengan model yang dipilih
+    // Create new chat if chatId not provided
+    let currentChatId = chatId;
+    if (!currentChatId) {
+      const newChat = await prisma.chat.create({
+        data: {
+          userId: authPayload.userId,
+          title: message.length > 30 ? message.substring(0, 30) + '...' : message,
+        },
+      });
+      currentChatId = newChat.id;
+    }
+
+    // Save user message
+    const userMessage = await prisma.message.create({
+      data: {
+        chatId: currentChatId,
+        role: MessageRole.USER,
+        content: message,
+      },
+    });
+
+    // Get AI response
     const aiResponse = await getAIResponse(message, [], modelId);
 
-    // Langsung return response tanpa reasoning process
-    return NextResponse.json({ response: aiResponse });
+    // Save AI response
+    const assistantMessage = await prisma.message.create({
+      data: {
+        chatId: currentChatId,
+        role: MessageRole.ASSISTANT,
+        content: aiResponse,
+      },
+    });
+
+    // Get updated chat with messages
+    const updatedChat = await prisma.chat.findUnique({
+      where: { id: currentChatId },
+      include: {
+        messages: {
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    return NextResponse.json({ 
+      response: aiResponse,
+      chat: updatedChat
+    });
     
   } catch (error) {
     console.error('Chat error:', error);

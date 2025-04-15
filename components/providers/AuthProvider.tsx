@@ -1,70 +1,93 @@
 'use client';
 
-import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { verifyToken } from '@/lib/auth';
+
+interface User {
+  id: string;
+  email: string;
+  name?: string;
+}
 
 interface AuthContextType {
+  user: User | null;
   token: string | null;
-  user: { email?: string; id?: string } | null;
-  isLoading: boolean;
-  login: (token: string, user?: any) => void;
+  login: (token: string, user: User) => void;
   logout: () => void;
+  isAuthenticated: boolean;
 }
 
-export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-interface AuthProviderProps {
-  children: ReactNode;
-}
+export { AuthContext };
 
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [user, setUser] = useState<AuthContextType['user']>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    try {
-      const storedToken = localStorage.getItem('authToken');
-      const storedUser = localStorage.getItem('authUser');
-      if (storedToken) {
-        setToken(storedToken);
-        if (storedUser) {
-          setUser(JSON.parse(storedUser));
+    // Check localStorage on mount
+    const storedToken = localStorage.getItem('authToken');
+    const storedUser = localStorage.getItem('user');
+
+    if (storedToken && storedUser) {
+      try {
+        const userData = JSON.parse(storedUser);
+        const isValid = verifyToken(storedToken);
+
+        if (isValid) {
+          setToken(storedToken);
+          setUser(userData);
+          setIsAuthenticated(true);
+        } else {
+          // Clear invalid data
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('user');
         }
+      } catch (error) {
+        console.error('Error parsing stored user data:', error);
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('user');
       }
-    } catch (error) {
-      console.error("Failed to parse auth data from localStorage", error);
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('authUser');
-    } finally {
-      setIsLoading(false);
     }
   }, []);
 
-  const login = useCallback((newToken: string, userData?: any) => {
+  const login = (newToken: string, userData: User) => {
     setToken(newToken);
+    setUser(userData);
+    setIsAuthenticated(true);
     localStorage.setItem('authToken', newToken);
-    if (userData) {
-      const minimalUserData = { email: userData.email, id: userData.id };
-      setUser(minimalUserData);
-      localStorage.setItem('authUser', JSON.stringify(minimalUserData));
-    } else {
-      setUser(null);
-      localStorage.removeItem('authUser');
-    }
-    setIsLoading(false);
-  }, []);
+    localStorage.setItem('user', JSON.stringify(userData));
+  };
 
-  const logout = useCallback(() => {
+  const logout = () => {
     setToken(null);
     setUser(null);
+    setIsAuthenticated(false);
     localStorage.removeItem('authToken');
-    localStorage.removeItem('authUser');
-    setIsLoading(false);
-  }, []);
+    localStorage.removeItem('user');
+  };
 
   return (
-    <AuthContext.Provider value={{ token, user, isLoading, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        login,
+        logout,
+        isAuthenticated,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
-}; 
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+} 

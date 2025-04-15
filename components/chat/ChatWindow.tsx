@@ -37,6 +37,8 @@ export default function ChatWindow() {
 
   // Find selected model name for display
   const selectedModelName = availableModels.find(m => m.id === selectedModel)?.name || 'Model AI';
+  
+  console.log('Rendering messages:', messages);
 
   return (
     <main className="flex-grow flex flex-col bg-white relative">
@@ -105,26 +107,44 @@ export default function ChatWindow() {
               <div
                 key={message.id || `msg-${index}`}
                 className={cn(
-                  'flex',
+                  'flex items-start gap-3',
                   message.role === MessageRole.User ? 'justify-end' : 'justify-start'
                 )}
               >
+                {message.role === MessageRole.Assistant && (
+                  <Avatar className="h-8 w-8 flex-shrink-0">
+                    <AvatarFallback className="bg-gray-100 text-gray-600">
+                      <Bot size={20} />
+                    </AvatarFallback>
+                  </Avatar>
+                )}
                 <div
                   className={cn(
-                    'max-w-[80%] rounded-lg px-4 py-3 text-sm',
+                    'max-w-[75%] rounded-lg px-4 py-2.5 text-sm shadow-sm',
                     message.role === MessageRole.User
                       ? 'bg-blue-500 text-white'
-                      : 'bg-gray-200 text-gray-800'
+                      : 'bg-gray-100 text-gray-800'
                   )}
                 >
                   <p className="whitespace-pre-wrap">{message.content}</p>
                 </div>
+                {message.role === MessageRole.User && (
+                  <Avatar className="h-8 w-8 flex-shrink-0">
+                    <AvatarImage src={`https://avatar.vercel.sh/${user?.email || 'default'}.png?size=32`} alt="User Avatar" />
+                    <AvatarFallback className="bg-blue-500 text-white">{getInitials(user?.email)}</AvatarFallback>
+                  </Avatar>
+                )}
               </div>
             ))}
             {isSendingMessage && (
-              <div className="flex justify-start">
-                <div className="max-w-[80%] rounded-lg px-4 py-3 text-sm bg-gray-200 text-gray-800">
-                  <div className="flex items-center space-x-2">
+              <div className="flex items-start gap-3 justify-start">
+                <Avatar className="h-8 w-8 flex-shrink-0">
+                  <AvatarFallback className="bg-gray-100 text-gray-600">
+                    <Bot size={20} />
+                  </AvatarFallback>
+                </Avatar>
+                <div className="max-w-[75%] rounded-lg px-4 py-2.5 text-sm shadow-sm bg-gray-100 text-gray-800">
+                  <div className="flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
                     <span>Mengetik...</span>
                   </div>

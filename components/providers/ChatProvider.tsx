@@ -55,9 +55,7 @@ interface ChatProviderProps {
   children: ReactNode;
 }
 
-// Constants for localStorage keys
-const CHATS_STORAGE_KEY = 'chat_app_chats';
-const CURRENT_CHAT_ID_KEY = 'chat_app_current_chat_id';
+// Constant for selected model
 const SELECTED_MODEL_KEY = 'chat_app_selected_model';
 
 export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
@@ -71,81 +69,69 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Load initial state from localStorage
+  // Load chats from database
   useEffect(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        const savedChats = localStorage.getItem(CHATS_STORAGE_KEY);
-        const savedCurrentChatId = localStorage.getItem(CURRENT_CHAT_ID_KEY);
-        const savedSelectedModel = localStorage.getItem(SELECTED_MODEL_KEY);
-        
-        const initialChats = savedChats ? JSON.parse(savedChats) : [];
-        const initialCurrentChatId = savedCurrentChatId || null;
-        const initialSelectedModel = savedSelectedModel || "";
+    const fetchChats = async () => {
+      try {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+          setError('Anda harus login terlebih dahulu');
+          return;
+        }
 
-        setChats(initialChats);
-        setCurrentChatId(initialCurrentChatId);
-        setSelectedModel(initialSelectedModel);
-        
-        setIsInitialized(true);
-        console.log("Chat state initialized from localStorage:", { chats: initialChats.length, currentChatId: initialCurrentChatId, selectedModel: initialSelectedModel });
+        const response = await fetch('/api/chat/db', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (!response.ok) throw new Error(`Failed to fetch chats: ${response.status}`);
+        const data = await response.json();
+        if (data.chats) {
+          setChats(data.chats);
+          // Set current chat to the first one if none selected
+          if (!currentChatId && data.chats.length > 0) {
+            setCurrentChatId(data.chats[0].id);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching chats:', error);
+        setError('Gagal mengambil daftar chat.');
       }
-    } catch (error) {
-      console.error("Error loading data from localStorage:", error);
-      localStorage.removeItem(CHATS_STORAGE_KEY);
-      localStorage.removeItem(CURRENT_CHAT_ID_KEY);
-      localStorage.removeItem(SELECTED_MODEL_KEY);
-      setIsInitialized(true); // Mark as initialized even on error to prevent loops
+    };
+
+    fetchChats();
+  }, [currentChatId]);
+
+  // Load selected model from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedSelectedModel = localStorage.getItem(SELECTED_MODEL_KEY);
+      if (savedSelectedModel) {
+        setSelectedModel(savedSelectedModel);
+      }
+      setIsInitialized(true);
     }
   }, []);
 
-  // Effect to load messages when currentChatId changes or chats are loaded
+  // Effect to load messages when currentChatId changes
   useEffect(() => {
-    if (isInitialized && currentChatId) {
+    if (currentChatId) {
       const currentChat = chats.find(chat => chat.id === currentChatId);
       if (currentChat) {
         setMessages(currentChat.messages);
       } else {
-        // If currentChatId exists but chat is not found (e.g., data corruption), reset
-        console.warn(`Chat with ID ${currentChatId} not found in loaded chats. Resetting current chat.`);
         setCurrentChatId(null);
         setMessages([]);
-        localStorage.removeItem(CURRENT_CHAT_ID_KEY);
       }
-    } else if (isInitialized && !currentChatId) {
-        setMessages([]); // Clear messages if no chat is selected
+    } else {
+      setMessages([]);
     }
-  }, [currentChatId, chats, isInitialized]);
-
-  // Save chats to localStorage
-  useEffect(() => {
-    if (isInitialized) {
-      localStorage.setItem(CHATS_STORAGE_KEY, JSON.stringify(chats));
-      console.log(`Saved ${chats.length} chats to localStorage.`);
-    }
-  }, [chats, isInitialized]);
-
-  // Save current chat ID to localStorage
-  useEffect(() => {
-    if (isInitialized) {
-      if (currentChatId) {
-        localStorage.setItem(CURRENT_CHAT_ID_KEY, currentChatId);
-      } else {
-        localStorage.removeItem(CURRENT_CHAT_ID_KEY);
-      }
-      console.log(`Saved currentChatId (${currentChatId}) to localStorage.`);
-    }
-  }, [currentChatId, isInitialized]);
+  }, [currentChatId, chats]);
 
   // Save selected model to localStorage
   useEffect(() => {
-    if (isInitialized) {
-      if (selectedModel) {
-        localStorage.setItem(SELECTED_MODEL_KEY, selectedModel);
-      } else {
-        localStorage.removeItem(SELECTED_MODEL_KEY);
-      }
-      console.log(`Saved selectedModel (${selectedModel}) to localStorage.`);
+    if (isInitialized && selectedModel) {
+      localStorage.setItem(SELECTED_MODEL_KEY, selectedModel);
     }
   }, [selectedModel, isInitialized]);
 
@@ -158,12 +144,9 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
         const data = await response.json();
         if (data.models && Array.isArray(data.models)) {
           setAvailableModels(data.models);
-          // Set default model only if not already set from localStorage
           if (isInitialized && !selectedModel && data.models.length > 0) {
             setSelectedModel(data.models[0].id);
           }
-        } else {
-          console.error('Invalid models data format:', data);
         }
       } catch (error) {
         console.error('Error fetching models:', error);
@@ -171,139 +154,161 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
       }
     };
 
-    if (isInitialized) { // Fetch models only after state is initialized
+    if (isInitialized) {
       fetchModels();
     }
-  }, [isInitialized, selectedModel]); // Rerun if selectedModel is initially empty
+  }, [isInitialized, selectedModel]);
 
   const updateSelectedModel = useCallback((modelId: string) => {
     setSelectedModel(modelId);
-    // Saving is handled by the useEffect hook
   }, []);
 
-  const createNewChat = useCallback(() => {
-    const newChatId = Date.now().toString();
-    const newChat: Chat = {
-      id: newChatId,
-      title: 'Diskusi Baru',
-      messages: []
-    };
-    setChats(prev => [newChat, ...prev]);
-    setCurrentChatId(newChatId);
-    // Saving chats and currentChatId is handled by useEffect hooks
+  const createNewChat = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setError('Anda harus login terlebih dahulu');
+        return;
+      }
+
+      const response = await fetch('/api/chat/db', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ title: 'Diskusi Baru' }),
+      });
+
+      if (!response.ok) throw new Error(`Failed to create chat: ${response.status}`);
+      const data = await response.json();
+      
+      if (data.chat) {
+        setChats(prev => [data.chat, ...prev]);
+        setCurrentChatId(data.chat.id);
+      }
+    } catch (error) {
+      console.error('Error creating chat:', error);
+      setError('Gagal membuat chat baru.');
+    }
   }, []);
 
   const selectChat = useCallback((chatId: string) => {
     if (chatId !== currentChatId) {
-        const chat = chats.find(c => c.id === chatId);
-        if (chat) {
-          setCurrentChatId(chatId);
-          // Loading messages and saving currentChatId is handled by useEffect hooks
-        } else {
-          console.warn(`Attempted to select non-existent chat ID: ${chatId}`);
-        }
+      const chat = chats.find(c => c.id === chatId);
+      if (chat) {
+        setCurrentChatId(chatId);
+      }
     }
   }, [chats, currentChatId]);
 
-  const deleteChat = useCallback((chatId: string) => {
-    const updatedChats = chats.filter(chat => chat.id !== chatId);
-    setChats(updatedChats);
-    
-    if (currentChatId === chatId) {
-      const newCurrentChatId = updatedChats.length > 0 ? updatedChats[0].id : null;
-      setCurrentChatId(newCurrentChatId);
+  const deleteChat = useCallback(async (chatId: string) => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setError('Anda harus login terlebih dahulu');
+        return;
+      }
+
+      const response = await fetch(`/api/chat/db?id=${chatId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) throw new Error(`Failed to delete chat: ${response.status}`);
+
+      setChats(prev => prev.filter(chat => chat.id !== chatId));
+      if (currentChatId === chatId) {
+        const remainingChats = chats.filter(chat => chat.id !== chatId);
+        setCurrentChatId(remainingChats.length > 0 ? remainingChats[0].id : null);
+      }
+    } catch (error) {
+      console.error('Error deleting chat:', error);
+      setError('Gagal menghapus chat.');
     }
-    // Saving chats and currentChatId is handled by useEffect hooks
   }, [chats, currentChatId]);
 
   const sendMessage = useCallback(async (content: string) => {
-    let currentTargetChatId = currentChatId;
-
     if (!content.trim() || isSendingMessage || !selectedModel) return;
 
     setIsSendingMessage(true);
     setError(null);
 
+    // Add user message immediately
     const userMessage: Message = {
       id: Date.now().toString(),
       role: MessageRole.User,
-      content
+      content: content.trim()
     };
 
-    // If no chat is selected, create one first
-    if (!currentTargetChatId) {
-      const newChatId = Date.now().toString();
-      const newChat: Chat = {
-        id: newChatId,
-        title: content.length > 30 ? content.substring(0, 30) + '...' : content,
-        messages: [userMessage]
-      };
-      setChats(prev => [newChat, ...prev]);
-      setCurrentChatId(newChatId);
-      setMessages([userMessage]); // Set messages directly for the new chat
-      currentTargetChatId = newChatId;
-    } else {
-      // Add message to the existing current chat
-      setMessages(prev => [...prev, userMessage]);
-      setChats(prev => prev.map(chat => 
-        chat.id === currentTargetChatId
-          ? { ...chat, messages: [...chat.messages, userMessage] }
-          : chat
-      ));
-    }
+    setMessages(prev => [...prev, userMessage]);
 
     try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setError('Anda harus login terlebih dahulu');
+        return;
+      }
+
+      // Send message to AI
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: content, modelId: selectedModel }),
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ 
+          message: content,
+          modelId: selectedModel,
+          chatId: currentChatId 
+        }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Error: ${response.status} - ${errorData?.error || 'Gagal mengirim pesan'}`);
+        const errorData = await response.json();
+        throw new Error(errorData?.error || 'Gagal mengirim pesan');
       }
 
       const data = await response.json();
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: MessageRole.Assistant,
-        content: data.response || 'Maaf, terjadi kesalahan.'
-      };
 
-      // Add assistant message to the correct chat
-      setMessages(prev => [...prev, assistantMessage]);
-      setChats(prev => prev.map(chat => 
-        chat.id === currentTargetChatId
-          ? { 
-              ...chat, 
-              messages: [...chat.messages, assistantMessage],
-              // Update title only if it was the default title and this is the first assistant message
-              title: (chat.title === 'Diskusi Baru' && chat.messages.length === 1) ? content.substring(0, 30) + '...' : chat.title
-            }
-          : chat
-      ));
+      // Refresh chats after sending message
+      const chatsResponse = await fetch('/api/chat/db', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!chatsResponse.ok) throw new Error('Failed to refresh chats');
+      const chatsData = await chatsResponse.json();
+      
+      if (chatsData.chats) {
+        setChats(chatsData.chats);
+        // Update messages if current chat
+        const updatedChat = chatsData.chats.find((c: Chat) => c.id === currentChatId);
+        if (updatedChat) {
+          // Get only the AI response from updated messages
+          const aiMessages = updatedChat.messages.filter((m: Message) => 
+            m.role === MessageRole.Assistant && 
+            !messages.some(existingMsg => existingMsg.id === m.id)
+          );
+          
+          console.log('Current messages:', messages);
+          console.log('AI messages from API:', aiMessages);
+          console.log('All messages from API:', updatedChat.messages);
 
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan saat mengirim pesan';
-      setError(errorMessage);
-      console.error('Error sending message:', err);
-      // Optionally add an error message to the chat
-      const errorAIMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: MessageRole.Assistant,
-        content: `Error: ${errorMessage}`
-      };
-      setMessages(prev => [...prev, errorAIMessage]);
-      setChats(prev => prev.map(chat => 
-        chat.id === currentTargetChatId
-          ? { ...chat, messages: [...chat.messages, errorAIMessage] }
-          : chat
-      ));
+          // Add AI response to existing messages
+          setMessages(prev => [...prev, ...aiMessages]);
+        }
+      }
+
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setError(error instanceof Error ? error.message : 'Terjadi kesalahan saat mengirim pesan');
     } finally {
       setIsSendingMessage(false);
     }
-  }, [currentChatId, isSendingMessage, selectedModel, chats]); // Removed createNewChat as it's handled internally now
+  }, [currentChatId, isSendingMessage, selectedModel, messages]);
 
   return (
     <ChatContext.Provider value={{

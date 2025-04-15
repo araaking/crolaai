@@ -8,7 +8,7 @@ import { NextAuthOptions, User as NextAuthUser } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
 const SALT_ROUNDS = 10; // Cost factor for hashing
-const JWT_SECRET = process.env.JWT_SECRET as string;
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const JWT_EXPIRES_IN = '1d'; // Token expiration time (e.g., 1 day)
 
 if (!JWT_SECRET) {
@@ -34,14 +34,32 @@ export async function comparePassword(password: string, hashedPassword: string):
   return bcrypt.compare(password, hashedPassword);
 }
 
-/**
- * Generates a JWT token for a user.
- * @param payload - The data to include in the token (e.g., { userId: string }).
- * @returns The generated JWT token.
- */
-export function generateToken(payload: { userId: string; email: string }): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+interface TokenPayload {
+  userId: string;
+  email: string;
+  role: string;
 }
+
+export const generateToken = (payload: TokenPayload): string => {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: '1d' });
+};
+
+export const verifyToken = (token: string): boolean => {
+  try {
+    jwt.verify(token, JWT_SECRET);
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+export const decodeToken = (token: string): TokenPayload | null => {
+  try {
+    return jwt.verify(token, JWT_SECRET) as TokenPayload;
+  } catch (error) {
+    return null;
+  }
+};
 
 /**
  * Verifies a JWT token and returns the decoded payload.
@@ -117,12 +135,7 @@ export const getAuthenticatedUser = async (request: NextRequest): Promise<User |
     }
 };
 
-interface JWTPayload {
-  userId: string;
-  email: string;
-}
-
-export function verifyAuth(request: NextRequest): JWTPayload | null {
+export function verifyAuth(request: NextRequest): TokenPayload | null {
   try {
     const token = request.headers.get('Authorization')?.replace('Bearer ', '');
     
@@ -130,7 +143,7 @@ export function verifyAuth(request: NextRequest): JWTPayload | null {
       return null;
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
+    const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
     return decoded;
   } catch (error) {
     console.error('Auth verification failed:', error);
